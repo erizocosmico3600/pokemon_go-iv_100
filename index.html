@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Calculadora 100% IV Pokémon GO</title>
+
+<style>
+body {
+    font-family: Arial, sans-serif;
+    background: #0f172a;
+    color: white;
+    text-align: center;
+    padding: 20px;
+}
+input {
+    padding: 10px;
+    width: 80%;
+    max-width: 300px;
+    font-size: 16px;
+}
+button {
+    padding: 10px 20px;
+    margin-top: 10px;
+    font-size: 16px;
+    cursor: pointer;
+}
+.card {
+    background: #1e293b;
+    padding: 20px;
+    border-radius: 12px;
+    margin-top: 20px;
+}
+</style>
+</head>
+<body>
+
+<h1>Calculadora 100% IV</h1>
+
+<input type="text" id="pokemonInput" placeholder="Ej: mewto, char, rayqaza">
+<br>
+<button onclick="buscarPokemon()">Calcular</button>
+
+<div class="card" id="resultado">Cargando datos...</div>
+
+<script>
+
+const CP_MULTIPLIERS = {
+    20: 0.59740001,
+    30: 0.73170000,
+    35: 0.76156384
+};
+
+let POKEMON_DATA = {};
+
+// 🔥 Carga segura del JSON
+fetch("pokemon_data.json")
+  .then(res => {
+      if (!res.ok) throw new Error("No se pudo cargar el archivo");
+      return res.json();
+  })
+  .then(data => {
+
+    if (!Array.isArray(data)) {
+        throw new Error("El JSON no es un array válido");
+    }
+
+    data.forEach(entry => {
+
+        try {
+
+            if (
+                entry &&
+                entry.data &&
+                entry.data.pokemonSettings &&
+                entry.data.pokemonSettings.stats &&
+                entry.data.pokemonSettings.stats.baseAttack
+            ) {
+
+                const settings = entry.data.pokemonSettings;
+                const stats = settings.stats;
+                const name = settings.pokemonId.toLowerCase();
+
+                POKEMON_DATA[name] = {
+                    attack: stats.baseAttack,
+                    defense: stats.baseDefense,
+                    stamina: stats.baseStamina
+                };
+            }
+
+        } catch (e) {
+            // Ignora entradas no válidas
+        }
+    });
+
+    document.getElementById("resultado").innerHTML = 
+        "Base lista ✔️ (" + Object.keys(POKEMON_DATA).length + " Pokémon cargados)";
+
+  })
+  .catch(error => {
+      console.error("ERROR REAL:", error);
+      document.getElementById("resultado").innerHTML =
+          "Error cargando base 😕<br>Revisa la consola";
+  });
+
+function calculateCP(attack, defense, stamina, level) {
+    let cpm = CP_MULTIPLIERS[level];
+    return Math.floor((attack * Math.sqrt(defense) * Math.sqrt(stamina) * (cpm * cpm)) / 10);
+}
+
+// 🔎 Distancia Levenshtein
+function levenshtein(a, b) {
+    const matrix = [];
+    for (let i = 0; i <= b.length; i++) matrix[i] = [i];
+    for (let j = 0; j <= a.length; j++) matrix[0][j] = j;
+
+    for (let i = 1; i <= b.length; i++) {
+        for (let j = 1; j <= a.length; j++) {
+            if (b.charAt(i - 1) === a.charAt(j - 1)) {
+                matrix[i][j] = matrix[i - 1][j - 1];
+            } else {
+                matrix[i][j] = Math.min(
+                    matrix[i - 1][j - 1] + 1,
+                    matrix[i][j - 1] + 1,
+                    matrix[i - 1][j] + 1
+                );
+            }
+        }
+    }
+    return matrix[b.length][a.length];
+}
+
+function encontrarMejorCoincidencia(input) {
+
+    let nombres = Object.keys(POKEMON_DATA);
+
+    let parcial = nombres.find(n => n.includes(input));
+    if (parcial) return parcial;
+
+    let mejor = null;
+    let mejorDistancia = Infinity;
+
+    nombres.forEach(nombre => {
+        let dist = levenshtein(input, nombre);
+        if (dist < mejorDistancia) {
+            mejorDistancia = dist;
+            mejor = nombre;
+        }
+    });
+
+    if (mejorDistancia <= 3) return mejor;
+
+    return null;
+}
+
+function buscarPokemon() {
+
+    let input = document.getElementById("pokemonInput").value.toLowerCase().trim();
+
+    if (!input) {
+        document.getElementById("resultado").innerHTML = "Escribe un Pokémon";
+        return;
+    }
+
+    let nombre = POKEMON_DATA[input] ? input : encontrarMejorCoincidencia(input);
+
+    if (!nombre) {
+        document.getElementById("resultado").innerHTML = "❌ Pokémon no encontrado";
+        return;
+    }
+
+    let data = POKEMON_DATA[nombre];
+
+    let attack = data.attack + 15;
+    let defense = data.defense + 15;
+    let stamina = data.stamina + 15;
+
+    let cp20 = calculateCP(attack, defense, stamina, 20);
+    let cp30 = calculateCP(attack, defense, stamina, 30);
+    let cp35 = calculateCP(attack, defense, stamina, 35);
+
+    document.getElementById("resultado").innerHTML = `
+        <b>${nombre.toUpperCase()} 100% IV</b><br><br>
+        ⚔️ Incursión (Nivel 20): ${cp20} PC<br>
+        🌿 Salvaje (Nivel 30): ${cp30} PC<br>
+        🌧️ Weather Boost (Nivel 35): ${cp35} PC
+    `;
+}
+
+</script>
+
+</body>
+</html>
